@@ -48,55 +48,52 @@ def get_face_box (net, frame, conf_threshold = 0.7):
             cv2.rectangle(frame_copy, (x1, y1), (x2, y2), (0, 255, 0), int(round(frame_height / 150)), 8)
 
     return frame_copy, boxes
-def age_gender_detector(input_path, age_predictions_list, gender_predictions_list):
+def age_gender_detector(input_path):
     image = cv2.imread(input_path)
     resized_image = cv2.resize(image, (640, 480))
 
     frame = resized_image.copy()
     frame_face, boxes = get_face_box(FACE_NET, frame)
 
+    age_predictions_list = []
+    gender_predictions_list = []
+
     for box in boxes:
-        y1 = max(0, box[1] - box_padding)
-        y2 = min(box[3] + box_padding, frame.shape[0] - 1)
-        x1 = max(0, box[0] - box_padding)
-        x2 = min(box[2] + box_padding, frame.shape[1] - 1)
+        face = frame[max(0, box[1] - box_padding):min(box[3] + box_padding, frame.shape[0] - 1), \
+              max(0, box[0] - box_padding):min(box[2] + box_padding, frame.shape[1] - 1)]
 
-        if x1 >= x2 or y1 >= y2:
-            continue
-
-        face = frame[y1:y2, x1:x2]
         blob = cv2.dnn.blobFromImage(face, 1.0, (227, 227), MODEL_MEAN_VALUES, swapRB=False)
         GENDER_NET.setInput(blob)
         gender_predictions = GENDER_NET.forward()
         gender = GENDER_LIST[gender_predictions[0].argmax()]
-        print("Gender: {}, conf: {:.3f}".format(gender, gender_predictions[0].max()))
 
         AGE_NET.setInput(blob)
         age_predictions = AGE_NET.forward()
         age = AGE_LIST[age_predictions[0].argmax()]
-        print("Age: {}, conf: {:.3f}".format(age, age_predictions[0].max()))
-
-        label = "{},{}".format(gender, age)
-        cv2.putText(frame_face, label, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA)
 
         age_predictions_list.append(age)
         gender_predictions_list.append(gender)
 
-    return frame_face
-
+    return age_predictions_list, gender_predictions_list
 
 if __name__ == "__main__":
     input_folder = sys.argv[1]
     output_folder = "output/"
 
+    image_paths = [os.path.join(input_folder, filename) for filename in os.listdir(input_folder)]
     age_predictions_list = []
     gender_predictions_list = []
 
-    for filename in os.listdir(input_folder):
-        input_path = os.path.join(input_folder, filename)
-        output = age_gender_detector(input_path, age_predictions_list, gender_predictions_list)
-        output_path = os.path.join(output_folder, filename)
-        cv2.imwrite(output_path, output)
+    for image_path in image_paths:
+        age_preds, gender_preds = age_gender_detector(image_path)
+        age_predictions_list.extend(age_preds)
+        gender_predictions_list.extend(gender_preds)
+        #input_path = os.path.join(input_folder, filename)
+        #output = age_gender_detector(input_path, age_predictions_list, gender_predictions_list)
+        #output_path = os.path.join(output_folder, filename)
+        #cv2.imwrite(output_path, output)
+
+        
 
     # Convert the lists to pandas Series objects
     age_predictions_series = pd.Series(age_predictions_list)
